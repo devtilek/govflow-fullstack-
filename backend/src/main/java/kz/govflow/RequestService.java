@@ -19,6 +19,15 @@ public class RequestService {
         return requests.stream().map(RequestResponse::from).toList();
     }
 
+    public RequestResponse get(long id) {
+        return RequestResponse.from(find(id));
+    }
+
+    private ServiceRequest find(long id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
+    }
+
     @Transactional
     public RequestResponse create(String title, String description) {
         return RequestResponse.from(repository.save(new ServiceRequest(title, description)));
@@ -26,8 +35,7 @@ public class RequestService {
 
     @Transactional
     public RequestResponse changeStatus(long id, RequestStatus status) {
-        var request = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
+        var request = find(id);
         request.changeStatus(status);
         repository.flush();
         return RequestResponse.from(request);

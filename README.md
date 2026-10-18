@@ -57,6 +57,7 @@ PostgreSQL доступен только внутри Docker-сети; данн�
 | --- | --- | --- |
 | GET | /api/requests | Массив обращений, новые первыми |
 | GET | /api/requests?status=NEW | Фильтр по статусу |
+| GET | /api/requests/{id} | Одно обращение или 404 |
 | POST | /api/requests | Создание обращения, HTTP 201 |
 | PATCH | /api/requests/{id}/status | Изменение статуса |
 

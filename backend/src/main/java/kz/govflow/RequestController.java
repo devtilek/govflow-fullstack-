@@ -21,6 +21,11 @@ public class RequestController {
         return service.list(status);
     }
 
+    @GetMapping("/{id}")
+    public RequestResponse get(@PathVariable long id) {
+        return service.get(id);
+    }
+
     @PostMapping
     public ResponseEntity<RequestResponse> create(@Valid @RequestBody CreateRequest body) {
         var result = service.create(body.title(), body.description());

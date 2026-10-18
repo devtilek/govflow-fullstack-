@@ -43,6 +43,14 @@ class RequestApiTest {
                 .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(id));
     }
 
+    @Test void createdResourceCanBeFetchedFromLocation() throws Exception {
+        long id = createRequest();
+        mvc.perform(get("/api/requests/{id}", id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.title").value("Street light"));
+        mvc.perform(get("/api/requests/999999")).andExpect(status().isNotFound());
+    }
+
     @Test void emptyListIsAnArray() throws Exception {
         mvc.perform(get("/api/requests")).andExpect(status().isOk()).andExpect(content().json("[]"));
     }
