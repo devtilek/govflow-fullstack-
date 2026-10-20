@@ -7,6 +7,17 @@ export type ServiceRequest = {
   createdAt: string;
 };
 
+export type RequestQuery = { page: number; size: number; q: string; status: Status | 'ALL' };
+export type RequestPage = { items: ServiceRequest[]; page: number; size: number; totalElements: number; totalPages: number };
+export type RequestStats = { total: number; newCount: number; inProgress: number; resolved: number };
+
+export function pagePath(query: RequestQuery): string {
+  const params = new URLSearchParams({ page: String(query.page), size: String(query.size) });
+  if (query.q.trim()) params.set('q', query.q.trim());
+  if (query.status !== 'ALL') params.set('status', query.status);
+  return '/page?' + params.toString();
+}
+
 async function request<T>(path = '', options?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -33,6 +44,8 @@ const json = (method: string, body: unknown): RequestInit => ({
 });
 
 export const requestsApi = {
+  page: (query: RequestQuery, signal?: AbortSignal) => request<RequestPage>(pagePath(query), { signal }),
+  stats: (signal?: AbortSignal) => request<RequestStats>('/stats', { signal }),
   list: (signal?: AbortSignal) => request<ServiceRequest[]>('', { signal }),
   create: (title: string, description: string) =>
     request<ServiceRequest>('', json('POST', { title: title.trim(), description: description.trim() })),
