@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.Locale;
+import java.util.EnumMap;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -25,6 +26,15 @@ public class RequestService {
 
     public RequestResponse get(long id) {
         return RequestResponse.from(find(id));
+    }
+
+    public RequestStats stats() {
+        var counts = new EnumMap<RequestStatus, Long>(RequestStatus.class);
+        repository.countByStatus().forEach(row -> counts.put(row.getStatus(), row.getTotal()));
+        long fresh = counts.getOrDefault(RequestStatus.NEW, 0L);
+        long active = counts.getOrDefault(RequestStatus.IN_PROGRESS, 0L);
+        long resolved = counts.getOrDefault(RequestStatus.RESOLVED, 0L);
+        return new RequestStats(fresh + active + resolved, fresh, active, resolved);
     }
 
     public RequestPage page(RequestStatus status, String query, int page, int size) {

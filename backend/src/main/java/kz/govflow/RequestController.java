@@ -34,6 +34,11 @@ public class RequestController {
         return service.page(status, q, page, size);
     }
 
+    @GetMapping("/stats")
+    public RequestStats stats() {
+        return service.stats();
+    }
+
     @PostMapping
     public ResponseEntity<RequestResponse> create(@Valid @RequestBody CreateRequest body) {
         var result = service.create(body.title(), body.description());
