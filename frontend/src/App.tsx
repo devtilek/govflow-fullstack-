@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { requestsApi } from './api';
-import type { ServiceRequest, Status } from './api';
+import type { RequestQuery, RequestStats, ServiceRequest, Status } from './api';
 
 const labels: Record<Status, string> = { NEW: 'Новое', IN_PROGRESS: 'В работе', RESOLVED: 'Решено' };
 const message = (error: unknown) => error instanceof Error ? error.message : 'Не удалось выполнить действие.';
@@ -13,7 +13,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<Status | 'ALL'>('ALL');
+  const [query, setQuery] = useState<RequestQuery>({ page: 0, size: 20, q: '', status: 'ALL' });
+  const [stats, setStats] = useState<RequestStats | null>(null);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [revision, setRevision] = useState(0);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
@@ -25,21 +29,43 @@ export default function App() {
     const controller = new AbortController();
     pendingLoad.current = controller;
     setLoading(true);
+    setLoaded(false);
     setError('');
     try {
-      const result = await requestsApi.list(controller.signal);
-      if (!controller.signal.aborted) { setItems(result); setLoaded(true); }
+      const [result, counters] = await Promise.all([
+        requestsApi.page(query, controller.signal), requestsApi.stats(controller.signal),
+      ]);
+      if (!controller.signal.aborted) {
+        const lastPage = Math.max(0, result.totalPages - 1);
+        if (query.page > lastPage) {
+          setQuery(previous => ({ ...previous, page: lastPage }));
+          return;
+        }
+        setItems(result.items);
+        setTotalElements(result.totalElements);
+        setTotalPages(result.totalPages);
+        setStats(counters);
+        setLoaded(true);
+      }
     } catch (error) {
       if (!controller.signal.aborted) setError(message(error));
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, []);
+  }, [query, revision]);
 
   useEffect(() => {
     void refresh();
     return () => pendingLoad.current?.abort();
   }, [refresh]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const q = search.trim();
+      setQuery(previous => previous.q === q ? previous : { ...previous, q, page: 0 });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   function beginMutation() {
     if (mutationLock.current) return false;
@@ -60,12 +86,12 @@ export default function App() {
     }
     if (!beginMutation()) return;
     try {
-      const created = await requestsApi.create(title, description);
-      setItems(previous => [created, ...previous]);
+      await requestsApi.create(title, description);
       setTitle('');
       setDescription('');
       setSearch('');
-      setFilter('ALL');
+      setQuery(previous => ({ ...previous, page: 0, q: '', status: 'ALL' }));
+      setRevision(previous => previous + 1);
       setNotice('Обращение создано.');
     } catch (error) {
       setError(message(error));
@@ -78,8 +104,8 @@ export default function App() {
   async function update(id: number, status: Status) {
     if (!beginMutation()) return;
     try {
-      const updated = await requestsApi.changeStatus(id, status);
-      setItems(previous => previous.map(item => item.id === id ? updated : item));
+      await requestsApi.changeStatus(id, status);
+      setRevision(previous => previous + 1);
       setNotice('Статус обращения обновлён.');
     } catch (error) {
       setError(message(error));
@@ -89,11 +115,7 @@ export default function App() {
     }
   }
 
-  const visible = items.filter(item =>
-    (filter === 'ALL' || item.status === filter) &&
-    (item.title + ' ' + item.description).toLowerCase().includes(search.trim().toLowerCase()));
-  const count = (status: Status) => items.filter(item => item.status === status).length;
-  const total = (value: number) => loaded ? value : '—';
+  const total = (value: number | undefined) => stats && value !== undefined ? value : '—';
 
   return <div className="layout">
     <aside><h2>◆ GovFlow</h2><p>РАБОЧАЯ ОБЛАСТЬ</p>
@@ -104,9 +126,9 @@ export default function App() {
       <div className="content">
         <h1>Обзор обращений</h1><p>Управляйте заявками и отслеживайте их выполнение.</p>
         <div className="cards">
-          <article><span>Всего обращений</span><strong>{total(items.length)}</strong></article>
-          <article><span>В работе</span><strong>{total(count('IN_PROGRESS'))}</strong></article>
-          <article><span>Решено</span><strong>{total(count('RESOLVED'))}</strong></article>
+          <article><span>Всего обращений</span><strong>{total(stats?.total)}</strong></article>
+          <article><span>В работе</span><strong>{total(stats?.inProgress)}</strong></article>
+          <article><span>Решено</span><strong>{total(stats?.resolved)}</strong></article>
         </div>
         {error && <p role="alert" className="error">{error}</p>}
         <p role="status" className="notice">{notice}</p>
@@ -127,33 +149,46 @@ export default function App() {
         </section>
         <section aria-busy={loading}>
           <div className="heading"><h2>Список обращений</h2>
-            <button disabled={loading || saving} onClick={() => void refresh()}>Обновить</button>
+            <button disabled={loading || saving} onClick={() => setRevision(previous => previous + 1)}>Обновить</button>
           </div>
           <div className="filters">
-            <input aria-label="Поиск обращений" placeholder="Поиск по названию и описанию…" value={search}
+            <input disabled={saving} maxLength={200} aria-label="Поиск обращений" placeholder="Поиск по названию и описанию…" value={search}
               onChange={event => setSearch(event.target.value)} />
-            <select aria-label="Статус обращения" value={filter} onChange={event => setFilter(event.target.value as Status | 'ALL')}>
+            <select disabled={saving} aria-label="Статус обращения" value={query.status} onChange={event => setQuery(previous => ({ ...previous, page: 0, status: event.target.value as Status | 'ALL' }))}>
               <option value="ALL">Все статусы</option>
               {Object.entries(labels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
             </select>
           </div>
           {loading ? <p role="status">Загрузка обращений…</p> : !loaded ?
             <p>Не удалось загрузить обращения. Нажмите «Обновить», чтобы повторить.</p> :
-            visible.length === 0 ? <p>{items.length === 0 ? 'Пока нет обращений. Создайте первое выше.' : 'По вашему запросу ничего не найдено.'}</p> :
+            items.length === 0 ? <p>{stats?.total === 0 ? 'Пока нет обращений. Создайте первое выше.' : 'По вашему запросу ничего не найдено.'}</p> :
             <div className="scroll"><table>
-              <caption>Обращения: {visible.length} из {items.length}</caption>
+              <caption>Найдено: {totalElements} · На странице: {items.length}</caption>
               <thead><tr><th scope="col">Обращение</th><th scope="col">Дата</th><th scope="col">Статус</th><th scope="col">Действие</th></tr></thead>
-              <tbody>{visible.map(item => <tr key={item.id}>
+              <tbody>{items.map(item => <tr key={item.id}>
                 <td><b>#{item.id} · {item.title}</b><p className="description">{item.description}</p></td>
                 <td><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</time></td>
                 <td><span className={'badge ' + item.status}>{labels[item.status]}</span></td>
                 <td>{item.status === 'RESOLVED' ? 'Завершено' :
-                  <button disabled={saving} aria-label={(item.status === 'NEW' ? 'Взять в работу: ' : 'Завершить: ') + item.title}
+                  <button disabled={saving || loading} aria-label={(item.status === 'NEW' ? 'Взять в работу: ' : 'Завершить: ') + item.title}
                     onClick={() => void update(item.id, item.status === 'NEW' ? 'IN_PROGRESS' : 'RESOLVED')}>
                     {item.status === 'NEW' ? 'В работу' : 'Завершить'}
                   </button>}</td>
               </tr>)}</tbody>
             </table></div>}
+          <nav className="pagination" aria-label="Страницы обращений">
+            <label>На странице <select aria-label="Количество на странице" value={query.size} disabled={loading || saving}
+              onChange={event => setQuery(previous => ({ ...previous, page: 0, size: Number(event.target.value) }))}>
+              {[10, 20, 50].map(size => <option key={size} value={size}>{size}</option>)}
+            </select></label>
+            <span aria-live="polite">{loaded ? `Страница ${query.page + 1} из ${Math.max(1, totalPages)}` : loading ? 'Загрузка страницы…' : 'Страница недоступна'}</span>
+            <div className="page-actions">
+              <button disabled={loading || saving || !loaded || query.page === 0}
+                onClick={() => setQuery(previous => ({ ...previous, page: previous.page - 1 }))}>Назад</button>
+              <button disabled={loading || saving || !loaded || query.page + 1 >= totalPages}
+                onClick={() => setQuery(previous => ({ ...previous, page: previous.page + 1 }))}>Далее</button>
+            </div>
+          </nav>
         </section>
       </div>
     </main>
