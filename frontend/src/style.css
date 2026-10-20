@@ -8,3 +8,8 @@ form small{color:#65738a;text-align:right}
 .description{white-space:pre-wrap;overflow-wrap:anywhere;max-width:480px}
 td b{overflow-wrap:anywhere}
 caption{text-align:left;color:#65738a;padding:8px 16px}
+.pagination{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid #edf0f5;margin-top:20px;padding-top:18px;font-size:13px;color:#65738a}
+.pagination label,.page-actions{display:flex;align-items:center;gap:10px}
+.pagination select{padding:8px 10px}
+.page-actions button{min-height:44px;min-width:80px}
+@media(max-width:540px){.pagination{align-items:flex-start}.pagination>span{order:3;flex-basis:100%}.page-actions{margin-left:auto}.heading{gap:12px}.heading h2{margin-bottom:0}td{padding:12px}.content{padding:16px}}
