@@ -26,6 +26,14 @@ public class RequestController {
         return service.get(id);
     }
 
+    @GetMapping("/page")
+    public RequestPage page(@RequestParam(required = false) RequestStatus status,
+                            @RequestParam(defaultValue = "") String q,
+                            @RequestParam(defaultValue = "0") int page,
+                            @RequestParam(defaultValue = "20") int size) {
+        return service.page(status, q, page, size);
+    }
+
     @PostMapping
     public ResponseEntity<RequestResponse> create(@Valid @RequestBody CreateRequest body) {
         var result = service.create(body.title(), body.description());

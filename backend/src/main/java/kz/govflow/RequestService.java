@@ -5,6 +5,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
+import java.util.Locale;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @Service
 @Transactional(readOnly = true)
@@ -21,6 +25,26 @@ public class RequestService {
 
     public RequestResponse get(long id) {
         return RequestResponse.from(find(id));
+    }
+
+    public RequestPage page(RequestStatus status, String query, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be non-negative; size must be between 1 and 100");
+        }
+        String term = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+        if (term.length() > 200) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search query must not exceed 200 characters");
+        }
+        Specification<ServiceRequest> matches = (root, ignored, cb) -> {
+            var statusMatch = status == null ? cb.conjunction() : cb.equal(root.get("status"), status);
+            if (term.isEmpty()) return statusMatch;
+            // LOCATE treats %, _ and backslash as literal characters, unlike LIKE.
+            var textMatch = cb.or(cb.greaterThan(cb.locate(cb.lower(root.get("title")), term), 0),
+                    cb.greaterThan(cb.locate(cb.lower(root.get("description")), term), 0));
+            return cb.and(statusMatch, textMatch);
+        };
+        var paging = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id"));
+        return RequestPage.from(repository.findAll(matches, paging));
     }
 
     private ServiceRequest find(long id) {
