@@ -7,6 +7,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.Locale;
 import java.util.EnumMap;
+import java.time.Instant;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -15,8 +16,12 @@ import org.springframework.data.jpa.domain.Specification;
 @Transactional(readOnly = true)
 public class RequestService {
     private final RequestRepository repository;
+    private final RequestHistoryRepository historyRepository;
 
-    public RequestService(RequestRepository repository) { this.repository = repository; }
+    public RequestService(RequestRepository repository, RequestHistoryRepository historyRepository) {
+        this.repository = repository;
+        this.historyRepository = historyRepository;
+    }
 
     public List<RequestResponse> list(RequestStatus status) {
         var requests = status == null ? repository.findAllByOrderByCreatedAtDescIdDesc()
@@ -26,6 +31,12 @@ public class RequestService {
 
     public RequestResponse get(long id) {
         return RequestResponse.from(find(id));
+    }
+
+    public List<HistoryResponse> history(long id) {
+        find(id);
+        return historyRepository.findByRequestIdOrderByOccurredAtAscIdAsc(id)
+                .stream().map(HistoryResponse::from).toList();
     }
 
     public RequestStats stats() {
@@ -64,14 +75,22 @@ public class RequestService {
 
     @Transactional
     public RequestResponse create(String title, String description) {
-        return RequestResponse.from(repository.save(new ServiceRequest(title, description)));
+        var request = repository.save(new ServiceRequest(title, description));
+        historyRepository.save(new RequestHistory(request.getId(), RequestHistory.Action.CREATED,
+                null, request.getStatus(), request.getCreatedAt()));
+        return RequestResponse.from(request);
     }
 
     @Transactional
     public RequestResponse changeStatus(long id, RequestStatus status) {
         var request = find(id);
+        var previous = request.getStatus();
         request.changeStatus(status);
         repository.flush();
+        if (previous != request.getStatus()) {
+            historyRepository.save(new RequestHistory(id, RequestHistory.Action.STATUS_CHANGED,
+                    previous, request.getStatus(), Instant.now()));
+        }
         return RequestResponse.from(request);
     }
 }

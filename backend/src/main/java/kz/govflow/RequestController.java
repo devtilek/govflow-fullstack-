@@ -39,6 +39,11 @@ public class RequestController {
         return service.stats();
     }
 
+    @GetMapping("/{id}/history")
+    public List<HistoryResponse> history(@PathVariable long id) {
+        return service.history(id);
+    }
+
     @PostMapping
     public ResponseEntity<RequestResponse> create(@Valid @RequestBody CreateRequest body) {
         var result = service.create(body.title(), body.description());
