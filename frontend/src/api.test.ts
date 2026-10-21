@@ -4,6 +4,15 @@ import { pagePath, requestsApi } from './api';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('paged API client', () => {
+  it('loads details and history through their request-specific paths', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response('[]'));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    await requestsApi.get(42, controller.signal);
+    await requestsApi.history(42, controller.signal);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/requests/42', { signal: controller.signal });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/42/history', { signal: controller.signal });
+  });
   it('encodes search text and omits the ALL status', () => {
     const path = pagePath({ page: 2, size: 20, q: '  Свет & 100%_  ', status: 'ALL' });
     const params = new URLSearchParams(path.split('?')[1]);

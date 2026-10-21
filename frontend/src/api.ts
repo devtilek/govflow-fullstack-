@@ -10,6 +10,13 @@ export type ServiceRequest = {
 export type RequestQuery = { page: number; size: number; q: string; status: Status | 'ALL' };
 export type RequestPage = { items: ServiceRequest[]; page: number; size: number; totalElements: number; totalPages: number };
 export type RequestStats = { total: number; newCount: number; inProgress: number; resolved: number };
+export type HistoryEvent = {
+  id: number;
+  action: 'CREATED' | 'STATUS_CHANGED' | 'IMPORTED';
+  fromStatus: Status | null;
+  toStatus: Status;
+  occurredAt: string;
+};
 
 export function pagePath(query: RequestQuery): string {
   const params = new URLSearchParams({ page: String(query.page), size: String(query.size) });
@@ -44,6 +51,8 @@ const json = (method: string, body: unknown): RequestInit => ({
 });
 
 export const requestsApi = {
+  get: (id: number, signal?: AbortSignal) => request<ServiceRequest>('/' + id, { signal }),
+  history: (id: number, signal?: AbortSignal) => request<HistoryEvent[]>('/' + id + '/history', { signal }),
   page: (query: RequestQuery, signal?: AbortSignal) => request<RequestPage>(pagePath(query), { signal }),
   stats: (signal?: AbortSignal) => request<RequestStats>('/stats', { signal }),
   list: (signal?: AbortSignal) => request<ServiceRequest[]>('', { signal }),
