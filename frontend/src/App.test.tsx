@@ -6,7 +6,7 @@ import App from './App';
 import { requestsApi } from './api';
 import type { RequestPage, RequestQuery, ServiceRequest } from './api';
 
-vi.mock('./api', () => ({ requestsApi: { page: vi.fn(), stats: vi.fn(), create: vi.fn(), changeStatus: vi.fn() } }));
+vi.mock('./api', () => ({ requestsApi: { page: vi.fn(), stats: vi.fn(), create: vi.fn(), changeStatus: vi.fn(), get: vi.fn(), history: vi.fn() } }));
 
 const item: ServiceRequest = { id: 1, title: 'Освещение', description: 'Не работает фонарь', status: 'NEW', createdAt: '2026-01-01T00:00:00Z' };
 const result = (query: RequestQuery): RequestPage => ({
@@ -20,8 +20,23 @@ beforeEach(() => {
   vi.mocked(requestsApi.stats).mockResolvedValue({ total: 25, newCount: 25, inProgress: 0, resolved: 0 });
   vi.mocked(requestsApi.create).mockResolvedValue(item);
   vi.mocked(requestsApi.changeStatus).mockResolvedValue({ ...item, status: 'IN_PROGRESS' });
+  vi.mocked(requestsApi.get).mockResolvedValue(item);
+  vi.mocked(requestsApi.history).mockResolvedValue([]);
 });
 afterEach(cleanup);
+
+it('opens request details and returns keyboard focus to the row after closing', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const open = await screen.findByRole('button', { name: 'Подробнее: Освещение' });
+  await user.click(open);
+  await screen.findByRole('heading', { name: 'История обращения' });
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Обращение #1' }));
+  expect(open.getAttribute('aria-expanded')).toBe('true');
+  await user.click(screen.getByRole('button', { name: 'Закрыть карточку обращения' }));
+  expect(screen.queryByRole('heading', { name: 'Обращение #1' })).toBeNull();
+  expect(document.activeElement).toBe(open);
+});
 
 it('navigates pages and resets to the first page after a debounced search', async () => {
   const user = userEvent.setup();

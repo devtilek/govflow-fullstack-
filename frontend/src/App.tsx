@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { requestsApi } from './api';
+import RequestDetails from './RequestDetails';
 import type { RequestQuery, RequestStats, ServiceRequest, Status } from './api';
 
 const labels: Record<Status, string> = { NEW: 'Новое', IN_PROGRESS: 'В работе', RESOLVED: 'Решено' };
@@ -18,6 +19,9 @@ export default function App() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [revision, setRevision] = useState(0);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const detailsButton = useRef<HTMLButtonElement | null>(null);
+  const listHeading = useRef<HTMLHeadingElement | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
@@ -87,6 +91,7 @@ export default function App() {
     if (!beginMutation()) return;
     try {
       await requestsApi.create(title, description);
+      setSelectedId(null);
       setTitle('');
       setDescription('');
       setSearch('');
@@ -116,6 +121,12 @@ export default function App() {
   }
 
   const total = (value: number | undefined) => stats && value !== undefined ? value : '—';
+
+  function closeDetails() {
+    setSelectedId(null);
+    if (detailsButton.current?.isConnected) detailsButton.current.focus();
+    else listHeading.current?.focus();
+  }
 
   return <div className="layout">
     <aside><h2>◆ GovFlow</h2><p>РАБОЧАЯ ОБЛАСТЬ</p>
@@ -147,8 +158,9 @@ export default function App() {
             </button>
           </form>
         </section>
+        {selectedId !== null && <RequestDetails key={selectedId} id={selectedId} revision={revision} onClose={closeDetails} />}
         <section aria-busy={loading}>
-          <div className="heading"><h2>Список обращений</h2>
+          <div className="heading"><h2 ref={listHeading} tabIndex={-1}>Список обращений</h2>
             <button disabled={loading || saving} onClick={() => setRevision(previous => previous + 1)}>Обновить</button>
           </div>
           <div className="filters">
@@ -169,11 +181,15 @@ export default function App() {
                 <td><b>#{item.id} · {item.title}</b><p className="description">{item.description}</p></td>
                 <td><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</time></td>
                 <td><span className={'badge ' + item.status}>{labels[item.status]}</span></td>
-                <td>{item.status === 'RESOLVED' ? 'Завершено' :
+                <td><div className="row-actions">
+                  <button type="button" className="secondary" aria-label={'Подробнее: ' + item.title}
+                    aria-expanded={selectedId === item.id} aria-controls={selectedId === item.id ? 'request-details' : undefined}
+                    onClick={event => { detailsButton.current = event.currentTarget; setSelectedId(item.id); }}>Подробнее</button>
+                  {item.status === 'RESOLVED' ? 'Завершено' :
                   <button disabled={saving || loading} aria-label={(item.status === 'NEW' ? 'Взять в работу: ' : 'Завершить: ') + item.title}
                     onClick={() => void update(item.id, item.status === 'NEW' ? 'IN_PROGRESS' : 'RESOLVED')}>
                     {item.status === 'NEW' ? 'В работу' : 'Завершить'}
-                  </button>}</td>
+                  </button>}</div></td>
               </tr>)}</tbody>
             </table></div>}
           <nav className="pagination" aria-label="Страницы обращений">
